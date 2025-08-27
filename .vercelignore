@@ -1,0 +1,6 @@
+.venv
+__pycache__/
+uploads/
+app.db
+*.log
+*.sqlite3
