@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 from app.database import Base, engine, SessionLocal
 from app import models
 from app.routers import candidates
-from app.emailer import send_mail  # ✅ Centralized email function
+from app.utils.emailer import send_mail  # ✅ Centralized email function
 
 # Load environment variables
 load_dotenv()

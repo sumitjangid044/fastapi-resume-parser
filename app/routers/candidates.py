@@ -1,55 +1,57 @@
-from fastapi import APIRouter, UploadFile, Form, HTTPException, Depends
-from sqlalchemy.orm import Session
-from app.database import get_db
-from app.models import Candidate
-from app.emailer import send_mail
-import shutil
+from fastapi import APIRouter, UploadFile, Form, HTTPException
 import os
+from pathlib import Path
+from datetime import datetime
+from app.utils.emailer import send_mail  # ✅ Email function import
 
-router = APIRouter(prefix="/candidates", tags=["Candidates"])
+router = APIRouter()
 
-UPLOAD_DIR = "uploads/resumes"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+# Directory for resumes
+UPLOAD_DIR = Path("uploads/resumes")
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
-@router.post("/apply")
-async def apply_candidate(
-    full_name: str = Form(...),
+@router.post("/upload-resume")
+async def upload_resume(
+    name: str = Form(...),
     email: str = Form(...),
-    position: str = Form(...),
-    resume: UploadFile = None,
-    db: Session = Depends(get_db)
+    role: str = Form(...),
+    resume: UploadFile = None
 ):
     try:
-        # ✅ Save resume to uploads folder
-        resume_path = None
-        if resume:
-            resume_path = os.path.join(UPLOAD_DIR, resume.filename)
-            with open(resume_path, "wb") as buffer:
-                shutil.copyfileobj(resume.file, buffer)
+        if not resume:
+            raise HTTPException(status_code=400, detail="Resume file is required")
 
-        # ✅ Save candidate info to DB
-        candidate = Candidate(full_name=full_name, email=email, position=position, resume_path=resume_path)
-        db.add(candidate)
-        db.commit()
-        db.refresh(candidate)
+        # Generate unique file name
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        file_ext = os.path.splitext(resume.filename)[1]
+        safe_filename = f"{name}_{role}_{timestamp}{file_ext}"
+        file_path = UPLOAD_DIR / safe_filename
 
-        # ✅ Send confirmation email
-        subject = f"Application received for {position}"
+        # Save resume file
+        with open(file_path, "wb") as f:
+            content = await resume.read()
+            f.write(content)
+
+        # ✅ Email content
+        subject = f"Application Received for {role}"
         body = f"""
-        <p>Dear {full_name},</p>
-        <p>Thank you for applying for the position of <strong>{position}</strong> at Your Company.</p>
+        <p>Dear {name},</p>
+        <p>Thank you for applying for the position of <b>{role}</b> at TailentTrail.</p>
         <p>We have reviewed your resume and are pleased to inform you that you have been shortlisted for the next stage.</p>
-        <p><a href="http://localhost:3000/schedule-exam?candidate_id={candidate.id}" style="color:blue;">Schedule Your Exam</a></p>
-        <br>
+        <p><a href="http://your-frontend-url.com/schedule-exam">👉 Schedule Your Exam</a></p>
         <p>Best regards,<br>Your HR Team</p>
         """
 
-        email_sent = send_mail(email, subject, body)
+        # ✅ Send email (don't fail API if email fails)
+        email_sent = send_mail(to_email=email, subject=subject, body=body)
 
-        if not email_sent:
-            raise HTTPException(status_code=500, detail="Candidate saved but email not sent.")
-
-        return {"message": "Application submitted successfully. Email sent."}
+        return {
+            "status": "success",
+            "message": "Resume uploaded successfully",
+            "email_status": "sent" if email_sent else "failed",
+            "role": role,
+            "resume_path": str(file_path)
+        }
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
