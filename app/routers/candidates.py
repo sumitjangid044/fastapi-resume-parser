@@ -33,6 +33,8 @@ async def upload_resume(
             f.write(content)
 
         # ✅ Email content
+        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+        link = f"{frontend_url}/schedule-exam"
         subject = f"Application Received for {role}"
         body = f"""
         <p>Dear {name},</p>
