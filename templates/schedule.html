@@ -1,0 +1,14 @@
+<html>
+<head><title>Schedule Your Exam</title></head>
+<body>
+    <h2>Schedule Your Exam</h2>
+    <form action="/schedule-confirm" method="post">
+        <input type="hidden" name="candidate_id" value="{{ candidate_id }}">
+        <label>Date:</label>
+        <input type="date" name="exam_date" required>
+        <label>Time:</label>
+        <input type="time" name="exam_time" required>
+        <button type="submit">Confirm Schedule</button>
+    </form>
+</body>
+</html>
