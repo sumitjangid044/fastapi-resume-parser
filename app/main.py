@@ -4,13 +4,12 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 import os
-import smtplib
-from email.mime.text import MIMEText
 from dotenv import load_dotenv
 
 from app.database import Base, engine, SessionLocal
 from app import models
 from app.routers import candidates
+from app.emailer import send_mail  # ✅ Centralized email function
 
 # Load environment variables
 load_dotenv()
@@ -61,9 +60,21 @@ async def schedule_confirm(candidate_id: int = Form(...), exam_date: str = Form(
         candidate.exam_time = exam_time
         db.commit()
 
-        # Send email confirmation
-        exam_link = f"https://your-exam-platform.com/exam?candidate_id={candidate_id}"
-        send_confirmation_email(candidate.email, exam_date, exam_time, exam_link)
+        # ✅ Send email using emailer.py
+        subject = "Your Exam is Scheduled"
+        body = f"""
+        <p>Hello {candidate.name},</p>
+        <p>Your exam has been successfully scheduled.</p>
+        <p><b>Date:</b> {exam_date}</p>
+        <p><b>Time:</b> {exam_time}</p>
+        <p><a href="https://your-exam-platform.com/exam?candidate_id={candidate_id}">Click here to join</a></p>
+        <p>Good luck!</p>
+        """
+
+        email_sent = send_mail(candidate.email, subject, body)
+
+        if not email_sent:
+            raise HTTPException(status_code=500, detail="Failed to send email")
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
@@ -76,39 +87,3 @@ async def schedule_confirm(candidate_id: int = Form(...), exam_date: str = Form(
 @app.get("/confirmation", response_class=HTMLResponse)
 async def confirmation_page():
     return HTMLResponse("<h3>Your exam is scheduled successfully! Check your email for details.</h3>")
-
-# ✅ Email Sending Function
-def send_confirmation_email(receiver_email, exam_date, exam_time, exam_link):
-    sender_email = os.getenv("EMAIL_SENDER")
-    password = os.getenv("EMAIL_PASSWORD")
-
-    if not sender_email or not password:
-        raise Exception("Email credentials are missing in .env")
-
-    subject = "Your Exam is Scheduled"
-    body = f"""
-    Hello,
-
-    Your exam has been successfully scheduled.
-    Date: {exam_date}
-    Time: {exam_time}
-
-    Click here to join: {exam_link}
-
-    Good luck!
-    """
-
-    msg = MIMEText(body)
-    msg["Subject"] = subject
-    msg["From"] = sender_email
-    msg["To"] = receiver_email
-
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-        server.login(sender_email, password)
-        server.sendmail(sender_email, receiver_email, msg.as_string())
-
-# ✅ Run app locally
-if __name__ == "__main__":
-    import uvicorn
-    port = int(os.environ.get("PORT", 8000))
-    uvicorn.run("app.main:app", host="0.0.0.0", port=port, reload=False)
